@@ -114,8 +114,12 @@ def train(data_dir, model_dir, args):
         num_classes=num_classes
     ).to(device)
 
+    # weight
+    weight = ins_weight(train_set.dataset, device, dataset.num_classes)
+
     # loss
-    criterion = create_criterion(args.criterion)  # default: cross_entropy
+    criterion = create_criterion(args.criterion, weight=weight)  # default: cross_entropy
+    criterion(weight=weight)
     opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: Adam
     optimizer = opt_module(
         filter(lambda p: p.requires_grad, model.parameters()),
@@ -195,7 +199,7 @@ def train(data_dir, model_dir, args):
                        "val f1": val_f1,
                        "val acc": val_acc})
             if val_f1 > best_val_f1:
-                print(f"New best model for val accuracy : {val_f1:4.2%}! saving the best model..")
+                print(f"New best model for val f1 : {val_f1:4.2%}! saving the best model..")
                 torch.save(model.state_dict(), f"{save_dir}/best.pth")
                 best_val_f1 = val_f1
             torch.save(model.state_dict(), f"{save_dir}/last.pth")

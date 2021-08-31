@@ -2,12 +2,13 @@ import os
 import numpy as np
 from enum import Enum
 
+import torchvision
 import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset, random_split
 from albumentations import *
 from albumentations.pytorch import ToTensorV2
-from torchvision.transforms import ToTensor
+from torchvision import transforms
 
 
 class MaskLabels(int, Enum):
@@ -52,9 +53,13 @@ class AgeLabels(int, Enum):
 
 
 class TestDataset(Dataset):
-    def __init__(self, img_paths, transform):
+    def __init__(self, img_paths, resize, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)):
         self.img_paths = img_paths
-        self.transform = transform
+        self.transform = torchvision.transforms.Compose([
+            transforms.Resize(resize, Image.BILINEAR),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std),
+        ])
 
     def __getitem__(self, index):
         image = Image.open(self.img_paths[index])
