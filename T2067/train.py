@@ -9,7 +9,5 @@ from utils.crop import *
 from utils.dataloader import *
 from utils.process_data import *
 
-#current_path = os.path.join(os.getcwd(),'T2067')
-
 dataframe = create_train_dataframe('data/train','cropped')
 model = CreateModel("efficientnet_b3",num_classes=18)
