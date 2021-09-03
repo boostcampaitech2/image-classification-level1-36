@@ -2,4 +2,7 @@
 *.png
 *.jpeg
 *.csv
+*.tar.gz
+*.zip
+*.pth
 ._*
