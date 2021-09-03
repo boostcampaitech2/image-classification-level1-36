@@ -56,13 +56,12 @@ def train(data_dir, model_dir, args):
     # model save dir
     save_dir = increment_path(os.path.join(model_dir, args.name))
     print(save_dir)
-    if not os.path.isdir(save_dir):
-        os.mkdir(save_dir)
+
     # device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # dataset
-    dataset_module = getattr(import_module("dataset"), args.dataset)  # default: Resnet18
+    dataset_module = getattr(import_module("dataset"), args.dataset)  # default: Train_dataset
     dataset = dataset_module(
         data_dir=data_dir
     )
@@ -119,7 +118,6 @@ def train(data_dir, model_dir, args):
 
     # loss
     criterion = create_criterion(args.criterion, weight=weight)  # default: cross_entropy
-    criterion(weight=weight)
     opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: Adam
     optimizer = opt_module(
         filter(lambda p: p.requires_grad, model.parameters()),
@@ -138,6 +136,8 @@ def train(data_dir, model_dir, args):
     wandb.init(project=args.name, entity='danielkim30433', config=config)
     # train
     wandb.watch(model)
+    if not os.path.isdir(save_dir):
+        os.mkdir(save_dir)
     best_val_f1 = 0
     best_val_loss = np.inf
     for epoch in range(args.epochs):
@@ -199,7 +199,7 @@ def train(data_dir, model_dir, args):
                        "val f1": val_f1,
                        "val acc": val_acc})
             if val_f1 > best_val_f1:
-                print(f"New best model for val f1 : {val_f1:4.2%}! saving the best model..")
+                print(f"New best model for val f1 : {val_f1:.5f}! saving the best model..")
                 torch.save(model.state_dict(), f"{save_dir}/best.pth")
                 best_val_f1 = val_f1
             torch.save(model.state_dict(), f"{save_dir}/last.pth")
@@ -209,12 +209,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # Data and model checkpoints directories
-    parser.add_argument('--seed', type=int, default=12, help='random seed (default: 55)')
-    parser.add_argument('--epochs', type=int, default=50, help='number of epochs to train (default: 50)')
+    parser.add_argument('--seed', type=int, default=55, help='random seed (default: 55)')
+    parser.add_argument('--epochs', type=int, default=20, help='number of epochs to train (default: 50)')
     parser.add_argument('--dataset', type=str, default='TrainDataset', help='dataset type (default: TrainDataset)')
     parser.add_argument('--augmentation', type=str, default='CustomAugmentation',
                         help='data augmentation type (default: CustomAugmentation)')
-    parser.add_argument("--resize", nargs="+", type=list, default=[512, 384],
+    parser.add_argument("--resize", nargs="+", type=list, default=[300, 300],
                         help='resize size for image when training')
     parser.add_argument('--batch_size', type=int, default=64, help='input batch size for training (default: 64)')
     parser.add_argument('--valid_batch_size', type=int, default=64,

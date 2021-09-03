@@ -1,7 +1,9 @@
 import os
 import numpy as np
 from enum import Enum
-
+import matplotlib.pyplot as plt
+from facenet_pytorch import MTCNN
+import cv2
 import torchvision
 import pandas as pd
 from PIL import Image
@@ -10,7 +12,7 @@ from albumentations import *
 from albumentations.pytorch import ToTensorV2
 from torchvision import transforms
 
-
+"""
 class MaskLabels(int, Enum):
     MASK = 0
     INCORRECT = 1
@@ -50,6 +52,7 @@ class AgeLabels(int, Enum):
             return cls.MIDDLE
         else:
             return cls.OLD
+"""
 
 
 class TestDataset(Dataset):
@@ -72,7 +75,7 @@ class TestDataset(Dataset):
         return len(self.img_paths)
 
 
-class TrainDataset(Dataset):
+class C_TrainDataset(Dataset):
     num_classes = 3 * 2 * 3
     mean = (0.548, 0.504, 0.479)
     std = (0.237, 0.247, 0.246)
@@ -80,7 +83,69 @@ class TrainDataset(Dataset):
     def __init__(self, data_dir, transform=None):
         self.transform = transform
         info_train = pd.read_csv(os.path.join(data_dir, 'train.csv'))
-        image_dir = os.path.join(data_dir, 'images')
+
+        self.image_dir = os.path.join(data_dir, 'cropped')
+        self.data, self.targets = self._load_data()
+
+    def __len__(self):
+        return len(self.targets)
+
+    def __getitem__(self, index):
+        img_name = self.data[index]
+        img = Image.open(img_name)
+        img = np.array(img)
+        if img.shape[2] == 4:
+            img = Image.fromarray(np.delete(img, -1, axis=-1))
+        image = self.transform(image=img)['image']
+        return image, self.targets[index]
+
+    def set_transform(self, transforms):
+        self.transform = transforms
+
+    # 000001_female_Asian_45incorrect_mask.jpg
+    def _load_data(self):
+        data = []
+        target = []
+
+        for _img_name in os.listdir(self.image_dir):
+            if _img_name[0] == '.':
+                continue
+            label = 0
+            img_name = _img_name.split('_')
+            sex = img_name[1]
+
+            age = int(img_name[3][:2])
+
+            mask = img_name[3][2:]
+            if sex == "female":
+                label += 3
+            if 30 <= age < 59:
+                label += 1
+            elif age >= 59:
+                label += 2
+            if "incorrect" in mask:
+                label += 6
+            if "normal" in mask:
+                label += 12
+            target.append(label)
+            data.append(os.path.join(self.image_dir, _img_name))
+        return data, target
+
+
+class TrainDataset(Dataset):
+    """
+    작성자: 김준홍_T2059
+    Train,Validation Dataset
+    """
+    num_classes = 3 * 2 * 3
+    mean = (0.548, 0.504, 0.479)
+    std = (0.237, 0.247, 0.246)
+
+    def __init__(self, data_dir, transform=None):
+        self.transform = transform
+        info_train = pd.read_csv(os.path.join(data_dir, 'train.csv'))
+
+        image_dir = os.path.join(data_dir, 'new_imgs')
         img_ids = [info_train['id'][i] + '_' + info_train['gender'][i] + '_Asian_' + str(info_train['age'][i]) for i in
                    info_train.index]
         self.img_paths = [os.path.join(image_dir, i_p) for i_p in img_ids]
@@ -89,7 +154,10 @@ class TrainDataset(Dataset):
     def __getitem__(self, index):
         img_name = self.data[index]
         img = Image.open(img_name)
-        image = self.transform(image=np.array(img))['image']
+        img = np.array(img)
+        if img.shape[2] == 4:
+            img = Image.fromarray(np.delete(img, -1, axis=-1))
+        image = self.transform(image=img)['image']
         return image, self.targets[index]
 
     def set_transform(self, transforms):
@@ -110,9 +178,9 @@ class TrainDataset(Dataset):
             label = 0
             if info[1] == 'female':
                 label += 3
-            if 30 <= int(info[-1]) < 60:
+            if 30 <= int(info[-1]) < 59:
                 label += 1
-            elif int(info[-1]) >= 60:
+            elif int(info[-1]) >= 59:
                 label += 2
             for file_name in files:
                 if file_name[0] == '.':
@@ -126,29 +194,28 @@ class TrainDataset(Dataset):
                 data.append(os.path.join(dir_name, file_name))
         return data, target
 
-    def split_dataset(self, val_ratio=0.2):
-        n_val = int(len(self) * val_ratio)
-        n_train = len(self) - n_val
-        train_set, val_set = random_split(self, [n_train, n_val])
-        return train_set, val_set
-
 
 class CustomAugmentation:
+    """
+    제작자: 김준홍_T2059
+    CustomAugmentation -> special mission 참고
+    """
+
     def __init__(self, need, resize, mean, std, **args):
         if 'train' in need:
             self.transform = Compose([
                 Resize(resize[0], resize[1], p=1.0),
-                HorizontalFlip(p=0.3),
-                ShiftScaleRotate(p=0.3),
-                HueSaturationValue(hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.3),
-                RandomBrightnessContrast(brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.3),
-                GaussNoise(p=0.2),
+                HorizontalFlip(p=0.5),
+                ShiftScaleRotate(p=0.5),
+                HueSaturationValue(hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.5),
+                RandomBrightnessContrast(brightness_limit=(-0.1, 0.1), contrast_limit=(-0.1, 0.1), p=0.5),
+                GaussNoise(p=0.5),
                 Normalize(mean=mean, std=std, max_pixel_value=255.0, p=1.0),
                 ToTensorV2(p=1.0),
             ], p=1.0)
         elif 'val' in need:
             self.transform = Compose([
-                Resize(resize[0], resize[1]),
+                Resize(resize[0], resize[1], p=1.0),
                 Normalize(mean=mean, std=std, max_pixel_value=255.0, p=1.0),
                 ToTensorV2(p=1.0),
             ], p=1.0)
